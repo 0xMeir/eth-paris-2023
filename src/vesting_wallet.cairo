@@ -2,8 +2,9 @@ use starknet::ContractAddress;
 
 #[starknet::contract]
 mod VestingWallet {
-    use starknet::{get_block_timestamp, ContractAddress};
+    use starknet::{get_block_timestamp, get_contract_address, ContractAddress};
     use vesting_wallet::interface;
+    use vesting_wallet::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
     use traits::Into;
 
     #[storage]
@@ -35,7 +36,6 @@ mod VestingWallet {
     ) {
         self.initializer(beneficiary_address, start_timestamp, duration_seconds);
     }
-
 
     #[external(v0)]
     impl VestingWalletImpl of interface::IVestingWallet<ContractState> {
@@ -70,14 +70,12 @@ mod VestingWallet {
             self.emit(ERC20Released { token, amount: released_amount });
             let ERC20 = IERC20Dispatcher { contract_address: token };
             if (amount > 0) {
-                ERC20.transfer(self.beneficiary(), amount);
+                ERC20.transfer(self._beneficiary.read(), amount);
             }
         }
+
         fn vested_amount(self: @ContractState, token: ContractAddress, timestamp: u64) -> u256 {
-            self
-                ._vestingSchedule(
-                    IERC20(token).balanceOf(address(this)) + self._released.read(token), timestamp
-                )
+            self._vested_amount(token, timestamp)
         }
     }
 
@@ -99,9 +97,10 @@ mod VestingWallet {
         }
 
         fn _vested_amount(self: @ContractState, token: ContractAddress, timestamp: u64) -> u256 {
+            let ERC20 = IERC20Dispatcher { contract_address: token };
             self
                 ._vestingSchedule(
-                    IERC20(token).balanceOf(address(this)) + self._released.read(token), timestamp
+                    ERC20.balance_of(get_contract_address()) + self._released.read(token), timestamp
                 )
         }
 
